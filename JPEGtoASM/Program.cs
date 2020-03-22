@@ -47,6 +47,7 @@ namespace JPEGtoASM
 
             if (args.Length > 0)
             {
+                bool compatibleMode = false;
                 string name = Path.GetFileNameWithoutExtension(args.First()) + ".asm";
                 Color transparentColor = Color.FromArgb(255, 0, 0, 0);
                 try
@@ -59,6 +60,8 @@ namespace JPEGtoASM
                     Console.WriteLine("ERROR : You must specify an output name");
                     Environment.Exit(0);
                 }
+                if (Array.Exists(args, s => s.Equals("--c")))
+                    compatibleMode = true;
                 if (Array.Exists(args, s => s.Equals("--t")))
                     if (args.Length > Array.IndexOf(args, "--t") + 3)
                         transparentColor = Color.FromArgb(255, int.Parse(args[Array.IndexOf(args, "--t") + 1]),
@@ -90,8 +93,35 @@ namespace JPEGtoASM
                                             sw.Write("\tinc  BX\n");
                                         else
                                             sw.Write("\tadd  BX, " + offsetSinceLastPixel + "\n");
-                                    sw.Write("\toxgSHOWPIXEL AX, BX, " + GetClosedMatch(pixel));
-                                    sw.Write(string.Format("\t; {0}-{1}\n", x, y));
+                                    if (!compatibleMode)
+                                    {
+                                        sw.Write("\toxgSHOWPIXEL AX, BX, " + GetClosedMatch(pixel));
+                                        sw.Write(string.Format("\t; {0}-{1}\n", x, y));
+                                    }
+                                    else
+                                    {
+                                        sw.Write(
+@"
+    push AX
+    push CX
+    push DX
+    push BX
+
+    mov  CX, AX
+    mov  DX, BX
+    mov  AL, " + GetClosedMatch(pixel) + @"
+
+    mov  AH, 0Ch
+    mov  BH, 1
+    int  10h" + string.Format("\t; {0}-{1}\n", x, y) + @"
+
+    pop  BX
+    pop  DX
+    pop  CX
+    pop  AX
+
+");
+                                    }
                                     offsetSinceLastPixel = 0;
                                 }
                                 offsetSinceLastPixel++;
@@ -115,6 +145,7 @@ namespace JPEGtoASM
                 Console.WriteLine("Help :\n\tBMPtoASM <file.bmp> [--t] [--o <output.asm>]");
                 Console.WriteLine("--t [<r> <g> <b>]:\n\tAllow transparency, aka don't draw black pixels by default, or specify another color key (0-255)");
                 Console.WriteLine("--o <file.asm> :\n\tChange the output name");
+                Console.WriteLine("--c :\n\tCompatibility mode, generate the entire code as if you don't have the oxylib (oxgSHOWPIXEL)");
             }
         }
     }
